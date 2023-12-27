@@ -11,7 +11,7 @@ AndroidRemoteGPT is an android frontend for chatbots running on remote servers. 
 
 AndroidRemoteGPT requires both Android and Termux. It also requires Termux:GUI. Because of an [ongoing problem with signing of the F-droid Termux:GUI package](https://github.com/termux/termux-gui/issues/4), you must use the [github Termux release](https://github.com/termux/termux-app/releases) rather than the F-droid Termux release. Versions of Termux from Google Play should never be used as they are insecure and will not be patched. 
 
-This software is built for a client/server model. It requires a server on which inference takes place. As of December 2023, there are a variety of open source models and architectures available. Instructions will be provided for gpt4all, but the frontend can be used with many different backends.
+This software is built for a client/server model. It requires a server on which inference takes place. As of December 2023, there are a variety of open source models and architectures available that can be run on linux. Instructions will be provided for [gpt4all](https://gpt4all.io/index.html), but the frontend can be used with many different backends.
 
 ## Installation on the Android device
 
@@ -42,11 +42,16 @@ Installation is complete. Now, you can run "python AndroidRemoteGPT.py"
 ## Example of ssh server setup for gpt4all
 
 1. As root, create a new user named aiuser. Also create a home directory for this user and ensure that the user has ownership of this directory.
+```
+useradd aiuser
+mkdir /home/aiuser
+chown aiuser.aiuser /home/aiuser
+```
 2. Ensure that python is installed. On Ubuntu, run "apt -y install python3"
-Do the server portion of [key-based authentication setup](https://tecadmin.net/setup-key-based-ssh-login/).
-3. Place "*" in the password portion of the /etc/shadow entry for aiuser
-4. su to aiuser run "su aiuser"
-5. Install gpt4all. We start by installing gpt4all via pip to install any dependencies, but the version in pip is old, so we remove it and compile/install the latest version.
+3. Do the server portion of [key-based authentication setup](https://tecadmin.net/setup-key-based-ssh-login/).
+4. Place "*" in the password portion of the /etc/shadow entry for aiuser
+5. su to aiuser run "su aiuser"
+6. Install gpt4all. We start by installing gpt4all via pip to install any dependencies, but the version in pip is old, so we remove it and compile/install the latest version.
 ```
 pip install gpt4all
 pip uninstall gpt4all
@@ -62,23 +67,24 @@ cmake --build . --config Release
 cd ~/gpt4all/gpt4all-bindings/python/
 pip install -e .
 ```
-6. Download your models. Models can be downloaded from [gpt4all.io](https://gpt4all.io/index.html).
-7. Link your models to where gpt4all can find them. 
+7. Download your models. Models can be downloaded from [gpt4all.io](https://gpt4all.io/index.html).
+8. Link your models to where gpt4all can find them. 
 ```
 mkdir ~/.cache
 mkdir ~/.cache/gpt4all
 cd ~/.cache/gpt4all
 ln -s /where/you/store/your/models/* .
 ```
-8. The console interface for gpt4all is ~/gpt4all/gpt4all-bindings/cli/app.py
-9. Create a shell script to run your model
+9. The console interface for gpt4all is ~/gpt4all/gpt4all-bindings/cli/app.py
+10. Create a shell script to run your model
 ```
 #!/bin/sh
 python3 ~/gpt4all/gpt4all-bindings/cli/app.py repl --model /wherever/you/put/your/model.gguf
 ```
 Optionally, you may include "-t (# of threads)" and "-d gpu" or "-d nvidia" if you have a video card that you wish to use.
-10. Test the shell script
-11. Optional: Prepend the public key entry in ~/.ssh/authorized_keys with `command="/home/aiuser/your_script.sh",restrict to limit use of the ai inference user account
+
+11. Test the shell script
+12. Optional: Prepend the public key entry in ~/.ssh/authorized_keys with `command="/home/aiuser/your_script.sh",restrict to limit use of the ai inference user account
 
 # Usage
 
@@ -101,6 +107,7 @@ Yes. If you are pulling models from huggingface and writing your own python scri
 # Plans
 
 1. Pretty up the interface
-2. Add text-to-speech
-3. Add an on-device option for people who have 8gb of RAM on their android devices
-4. Allow ssh passwords?
+2. Add an icon so that AndroidRemoteGPT can be launched from Android directly without first loading Termux
+3. Add text-to-speech
+4. Add an on-device inference option for people who have 8gb of RAM on their android devices
+5. Allow ssh passwords?

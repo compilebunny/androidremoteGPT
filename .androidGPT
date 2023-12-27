@@ -1,0 +1,6 @@
+server=test-server-described-in-config
+port=22
+# comments should be skipped
+sequence=
+user=aiuser
+next_cmd_indicator=⇢
