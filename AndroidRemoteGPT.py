@@ -34,7 +34,7 @@ def ReadConfigFromDisk(cfname):
 	configinfo = [line for line in configinfo if len(line)>3]
 
 	# Convert the array into a dict structure; keys are made lowercase automatically
-	infopackage = {'server':'', 'port': '22', 'user':'', 'password':'', 'sequence':'', 'next_cmd_indicator':'⇢'}
+	infopackage = {'server':'', 'port': '22', 'user':'', 'password':'', 'sequence':'', 'logfile':'', 'next_cmd_indicator':'⇢'}
 	for i in range(len(configinfo)): 
 		if ('=' in configinfo[i]): infopackage[str.lower(configinfo[i].split('=')[0])] = configinfo[i].split('=')[1]
 
@@ -115,6 +115,9 @@ def doConfigPage(connection):
 	sequenceask = ConfigPageTextObject(configactivity, configlayout,"setup sequence: commands to execute after logging in. Separate multiple unix shell commands with semicolons.",12)
 	getsequence = ConfigPageEditBox(configactivity, configlayout, configdata['sequence'],60)
 
+	logfileask = ConfigPageTextObject(configactivity, configlayout,"logfile name",12)
+	getlogfile = ConfigPageEditBox(configactivity, configlayout, configdata['logfile'],60)
+
 	buttons = tg.LinearLayout(configactivity, configlayout, False)
 	buttons.setlinearlayoutparams(0)
 	savebutton = tg.Button(configactivity, "save", buttons)
@@ -130,13 +133,15 @@ def doConfigPage(connection):
 			configdata["user"] = getusername.gettext()
 #			configdata["password"] = getpassword.gettext()
 			configdata["sequence"] = getsequence.gettext()
+			configdata["logfile"] = getlogfile.gettext()
 			configdata["next_cmd_indicator"] = getnextcmd.gettext()
 			WriteConfigToDisk(configdata)
 		if eventmanager.type == tg.Event.click and eventmanager.value["id"] == cancelbutton:
 			configactivity.finish()
-			doMainPage(connection)
+#			doMainPage(connection)
 			tg.Event.destroy
 			print (f"exiting config screen: {configdata}")			
+			return
 			
 # Finished with doConfigPage
 
@@ -146,12 +151,16 @@ def doMainPage(connection):
 	latestcommand = "blank"
 	lastresponse = "no response yet"
 	
+	speakstate=False
+	logstate=False
+	
 	# Create a set of layouts
 	first_layout = tg.LinearLayout(mainscreen) 
 	horizdivide = tg.LinearLayout(mainscreen, first_layout, False)
 	query_side = tg.LinearLayout(mainscreen, horizdivide)
 	control_side = tg.LinearLayout(mainscreen, horizdivide)
-	 
+#	control_side.setwidth(80)
+
 	# create a TextView page title for the query/response side of the screen
 	title = tg.TextView(mainscreen, "Query/Response",query_side)
 	title.setlinearlayoutparams(0)
@@ -183,21 +192,52 @@ def doMainPage(connection):
 	disconnectbutton.setlinearlayoutparams(0)
 	disconnectbutton.setheight(tg.View.WRAP_CONTENT)
 
+	speak = tg.Checkbox(mainscreen,"speak?",control_side,False)
+	speak.setlinearlayoutparams(0)
+	speak.setheight(tg.View.WRAP_CONTENT)
+
+	logcheckbox = tg.Checkbox(mainscreen,"log?",control_side,False)
+	logcheckbox.setlinearlayoutparams(0)
+	logcheckbox.setheight(tg.View.WRAP_CONTENT)
+
 	exitbutton = tg.Button(mainscreen, "exit", control_side)
 	exitbutton.setlinearlayoutparams(0)
 	exitbutton.setheight(tg.View.WRAP_CONTENT)
+
+	errorstate_text = MainPageTextObject(mainscreen,control_side,"no state",12)
+	logstate_text = MainPageTextObject(mainscreen,control_side,"not logging",12)
+	speakstate_text = MainPageTextObject(mainscreen,control_side,"not speaking",12)
+
 	
-	for eventmanager in c.events():
+	for eventmanager in connection.events():
+		if eventmanager.type == tg.Event.click and eventmanager.value["id"] == speak:
+			if (speakstate): 
+				speakstate=False
+				speakstate_text.settext("speech off")
+			else: 
+				speakstate=True
+				speakstate_text.settext("speech on")
+		if eventmanager.type == tg.Event.click and eventmanager.value["id"] == logcheckbox:
+			if (logstate): 
+				logstate=False
+				logstate_text.settext("logging off")
+			else: 
+				logstate=True
+				logstate_text.settext("logging on")
 		if eventmanager.type == tg.Event.click and eventmanager.value["id"] == configbutton:
 			doConfigPage(c)
 		if eventmanager.type == tg.Event.click and eventmanager.value["id"] == connectbutton:
+			errorstate_text.settext("waiting for connection")
 			ssh_connection=MakeSSHConnection()
 			lastresponse=printthrough(ssh_connection,False)
 			response.settext(lastresponse)
+			errorstate_text.settext("connected")
+#			control_side.setwidth(80)
 		if eventmanager.type == tg.Event.click and eventmanager.value["id"] == disconnectbutton:
 			try:
 				if ssh_connection.poll() is None: ssh_connection.terminate()
 			except NameError: nothing=1	
+			errorstate_text.settext("disconnected")
 		if eventmanager.type == tg.Event.click and eventmanager.value["id"] == exitbutton:
 			mainscreen.finish()
 			try:
@@ -206,10 +246,21 @@ def doMainPage(connection):
 			connection.close()
 			sys.exit(0)
 		if eventmanager.type == tg.Event.click and eventmanager.value["id"] == requestbutton:
-			ssh_connection.stdin.write(nextcommand.gettext()+"\n")
-			ssh_connection.stdin.flush()  # important
-			lastresponse=printthrough(ssh_connection,False)
-			response.settext(lastresponse)
+			try:
+				if ssh_connection.poll() is None:
+					ssh_connection.stdin.write(nextcommand.gettext()+"\n")
+					ssh_connection.stdin.flush()  # important
+					errorstate_text.settext("awaiting response")
+					lastresponse=printthrough(ssh_connection,False)
+					response.settext(lastresponse)
+					errorstate_text.settext("connected")
+					# Log the result
+					if (logstate): logresult(nextcommand.gettext(),lastresponse)
+					if (speakstate): voicespeak(lastresponse)
+#					control_side.setwidth(80)
+			except NameError: errorstate_text.settext("disconnected")	
+
+
 
 def printthrough(handle,debug):	
 # Read the source until the next command indicator is reached and return the result
@@ -224,6 +275,15 @@ def printthrough(handle,debug):
 	if (debug==True): print ("printthrough complete")	
 	return response
 
+def logresult(query,response):
+	with open(configdata["logfile"],'a') as logf: logf.write("[query] "+query+"\n\n"+"[response] "+response+"\n\n")
+	logf.close()
+
+def voicespeak(text):
+	speakhandle= Popen(['espeak','--stdin'],stdin=PIPE,stdout=PIPE,stderr=PIPE, encoding="UTF8")
+	speakhandle.communicate(text)
+	speakhandle.terminate()
+
 def MakeSSHConnection():
 	if len(configdata["port"])<1: configdata["port"]="22" 
 #	p= Popen([ssh_location,'-p',configdata["port"],configdata["server"]],stdin=PIPE,stdout=PIPE,stderr=PIPE, encoding="UTF8")
@@ -231,7 +291,6 @@ def MakeSSHConnection():
 	if len(configdata["user"])>1: 
 		descrip=configdata["user"]+"@"+configdata["server"]
 		p= Popen(['ssh','-p',configdata["port"],descrip],stdin=PIPE,stdout=PIPE,stderr=PIPE, encoding="UTF8")
-		
 	if len(configdata["sequence"])>1: 
 		p.stdin.write(configdata["sequence"]+"\n")
 		p.stdin.flush()  # important
@@ -246,7 +305,7 @@ print ("AndroidRemoteGPT by Jonathan Germain\nAvailable at https://github.com/co
 # Variable definitions
 configfilename = '~/.androidGPT'
 python_location="/data/data/com.termux/files/usr/bin/python"
-ssh_location="/data/data/com.termux/files/usr/bin/ssh"
+ssh_location="/data/data/com.termux/fjiles/usr/bin/ssh"
 
 print ("starting")
 configdata = ReadConfigFromDisk(configfilename)
